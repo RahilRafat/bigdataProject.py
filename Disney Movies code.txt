@@ -1,0 +1,577 @@
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+from pymongo import MongoClient
+import pandas as pd
+from tkinter import ttk
+from ttkbootstrap import Style
+
+# Connect to MongoDB
+client = MongoClient('mongodb://localhost:27017/')
+db = client['disney']
+
+# Load data from CSV
+csv_file = 'disney_plus_titles.csv'
+csv_data = pd.read_csv(csv_file)
+
+# Define the columns and the corresponding collection names
+column_collections = {
+    'showName': ['show_id', 'title', 'description', 'duration', 'rating', 'release_year', 'cast'],
+    'showType': ['show_id', 'type'],
+    'showdate': ['show_id', 'country', 'date_added'],
+}
+
+# Insert data into MongoDB collections (Create)
+def insert_data():
+    for collection_name, columns in column_collections.items():
+        collection_data = csv_data[columns]
+        collection_records = collection_data.to_dict(orient='records')
+        collection = db[collection_name]
+        collection.insert_many(collection_records)
+    messagebox.showinfo("Insert", "Data inserted into MongoDB collections.")
+
+# Read data from a collection based on a condition
+def read_data(collection_name, query):
+    collection = db[collection_name]
+    return list(collection.find(query))
+
+# Update a record in a collection based on a condition
+def update_data(collection_name, query, new_values):
+    collection = db[collection_name]
+    collection.update_many(query, {'$set': new_values})
+
+# Delete records from a collection based on a condition
+def delete_data(collection_name, query):
+    collection = db[collection_name]
+    collection.delete_many(query)
+
+# CRUD operations for 'showType' collection
+def on_insert_showType():
+    show_id = simpledialog.askstring("Insert showType", "Enter Show ID:")
+    type_name = simpledialog.askstring("Insert showType", "Enter Show Type:")
+    if show_id and type_name:
+        collection = db['showType']
+        collection.insert_one({'show_id': show_id, 'type': type_name})
+        messagebox.showinfo("Insert showType", f"Show Type '{type_name}' for Show ID '{show_id}' inserted successfully.")
+
+def on_read_showType():
+    show_types = db['showType'].find()
+    result_text.delete(1.0, tk.END)  # Clear previous results
+    result_text.insert(tk.END, "Show Types:\n")
+    for show_type in show_types:
+        result_text.insert(tk.END, f"ID: {show_type['show_id']}, Type: {show_type['type']}\n")
+
+def on_update_showType():
+    show_id = simpledialog.askstring("Update showType", "Enter Show ID:")
+    if show_id:
+        new_type = simpledialog.askstring("Update showType", "Enter New Show Type:")
+        if new_type:
+            collection = db['showType']
+            collection.update_one({'show_id': show_id}, {'$set': {'type': new_type}})
+            messagebox.showinfo("Update showType", f"Show Type for Show ID '{show_id}' updated to '{new_type}' successfully.")
+
+def on_delete_showType():
+    show_id = simpledialog.askstring("Delete showType", "Enter Show ID to Delete:")
+    if show_id:
+        collection = db['showType']
+        collection.delete_one({'show_id': show_id})
+        messagebox.showinfo("Delete showType", f"Show Type for Show ID '{show_id}' deleted successfully.")
+
+# CRUD operations for 'showdate' collection
+def on_insert_showdate():
+    show_id = simpledialog.askstring("Insert showdate", "Enter Show ID:")
+    country = simpledialog.askstring("Insert showdate", "Enter Country:")
+    date_added = simpledialog.askstring("Insert showdate", "Enter Date Added (YYYY-MM-DD):")
+    if show_id and country and date_added:
+        collection = db['showdate']
+        collection.insert_one({'show_id': show_id, 'country': country, 'date_added': date_added})
+        messagebox.showinfo("Insert showdate", "Show date inserted successfully.")
+
+def on_read_showdate():
+    show_dates = db['showdate'].find()
+    result_text.delete(1.0, tk.END)  # Clear previous results
+    result_text.insert(tk.END, "Show Dates:\n")
+    for show_date in show_dates:
+        result_text.insert(tk.END, f"ID: {show_date['show_id']}, Country: {show_date['country']}, Date Added: {show_date['date_added']}\n")
+
+def on_update_showdate():
+    show_id = simpledialog.askstring("Update showdate", "Enter Show ID:")
+    if show_id:
+        new_country = simpledialog.askstring("Update showdate", "Enter New Country:")
+        new_date_added = simpledialog.askstring("Update showdate", "Enter New Date Added (YYYY-MM-DD):")
+        if new_country and new_date_added:
+            collection = db['showdate']
+            collection.update_one({'show_id': show_id}, {'$set': {'country': new_country, 'date_added': new_date_added}})
+            messagebox.showinfo("Update showdate", f"Show date for Show ID '{show_id}' updated successfully.")
+
+def on_delete_showdate():
+    show_id = simpledialog.askstring("Delete showdate", "Enter Show ID to Delete:")
+    if show_id:
+        collection = db['showdate']
+        collection.delete_one({'show_id': show_id})
+        messagebox.showinfo("Delete showdate", f"Show date for Show ID '{show_id}' deleted successfully.")
+
+# Get show titles by show type
+def get_titles_by_type(show_type):
+    showType_collection = db['showType']
+    show_ids = showType_collection.find({'type': show_type}, {'show_id': 1, '_id': 0})
+    show_ids = [show_id['show_id'] for show_id in show_ids]
+
+    showName_collection = db['showName']
+    titles = showName_collection.find({'show_id': {'$in': show_ids}}, {'title': 1, '_id': 0})
+    return [title['title'] for title in titles]
+
+# Get show titles by duration
+def get_titles_by_duration(duration):
+    showName_collection = db['showName']
+    titles = showName_collection.find({'duration': duration}, {'title': 1, '_id': 0})
+    return [title['title'] for title in titles]
+
+# Get show titles by rating
+def get_titles_by_rating(rating):
+    showName_collection = db['showName']
+    titles = showName_collection.find({'rating': rating}, {'title': 1, '_id': 0})
+    return [title['title'] for title in titles]
+
+def get_details_by_title(title):
+    # Query the showName collection
+    show_name_data = db['showName'].find_one({'title': title})
+
+    if show_name_data:
+        show_id = show_name_data['show_id']
+
+        # Query the showType collection
+        show_type_data = db['showType'].find_one({'show_id': show_id})
+
+        # Query the showdate collection
+        show_date_data = db['showdate'].find_one({'show_id': show_id})
+
+        return {
+            **show_name_data,
+            **(show_type_data or {}),
+            **(show_date_data or {})
+        }
+    else:
+        return None
+
+# Get cast by show title
+def get_cast_by_title(title):
+    showName_collection = db['showName']
+    show = showName_collection.find_one({'title': title}, {'cast': 1, '_id': 0})
+    return show['cast'] if show else None
+
+# Sort shows by release year in ascending order
+def sort_by_release_year():
+    collection = db['showName']
+    shows = collection.find().sort("release_year", 1)  # 1 for ascending order
+    if shows:
+        result_text.delete(1.0, tk.END)  # Clear previous results
+        for show in shows:
+            for key, value in show.items():
+                result_text.insert(tk.END, f"{key}: {value}\n")
+            result_text.insert(tk.END, "\n")
+    else:
+        messagebox.showinfo("Sort by Release Year", "No shows found.")
+
+# Sort shows by rating in ascending order
+def sort_by_rating():
+    collection = db['showName']
+    shows = collection.find().sort("rating", 1)  # 1 for ascending order
+    if shows:
+        result_text.delete(1.0, tk.END)  # Clear previous results
+        for show in shows:
+            for key, value in show.items():
+                result_text.insert(tk.END, f"{key}: {value}\n")
+            result_text.insert(tk.END, "\n")
+    else:
+        messagebox.showinfo("Sort by Rating", "No shows found.")
+
+# Sort shows by duration in ascending order
+def sort_by_duration():
+    collection = db['showName']
+    shows = collection.find().sort("duration", 1)  # 1 for ascending order
+    if shows:
+        result_text.delete(1.0, tk.END)  # Clear previous results
+        for show in shows:
+            for key, value in show.items():
+                result_text.insert(tk.END, f"{key}: {value}\n")
+            result_text.insert(tk.END, "\n")
+    else:
+        messagebox.showinfo("Sort by Duration", "No shows found.")
+
+def map_reduce_example():
+    map_function = """
+    function() {
+        emit(this.release_year, { titles: [this.title] });
+    }
+    """
+
+    reduce_function = """
+    function(key, values) {
+        var result = { titles: [] };
+        values.forEach(function(value) {
+            result.titles = result.titles.concat(value.titles);
+        });
+        return result;
+    }
+    """
+
+    result = db.command({
+        'mapReduce': 'showName',
+        'map': map_function,
+        'reduce': reduce_function,
+        'out': {'inline': 1}
+    })
+    return result['results']
+
+def map_reduce_movies_by_rating():
+    map_func = """
+    function() {
+        emit(this.rating, 1);
+    }
+    """
+
+    reduce_func = """
+    function(key, values) {
+        return Array.sum(values);
+    }
+    """
+
+    result = db.command({
+        'mapReduce': 'showName',
+        'map': map_func,
+        'reduce': reduce_func,
+        'out': {'inline': 1}
+    })
+    return result['results']
+
+def map_reduce_by_country():
+    map_function = """
+    function() {
+        emit(this.country, { show_ids: [this.show_id] });
+    }
+    """
+
+    reduce_function = """
+    function(key, values) {
+        var result = { show_ids: [] };
+        values.forEach(function(value) {
+            value.show_ids.forEach(function(show_id) {
+                if (result.show_ids.indexOf(show_id) === -1) {
+                    result.show_ids.push(show_id);
+                }
+            });
+        });
+        return result;
+    }
+    """
+
+    result = db.command({
+        'mapReduce': 'showdate',
+        'map': map_function,
+        'reduce': reduce_function,
+        'out': {'inline': 1}
+    })
+
+    # Fetch the corresponding titles from showName collection
+    country_titles = {}
+    showName_collection = db['showName']
+    for entry in result['results']:
+        country = entry['_id']
+        show_ids = entry['value']['show_ids']
+        titles = showName_collection.find({'show_id': {'$in': show_ids}}, {'title': 1, '_id': 0})
+        country_titles[country] = list(set([title['title'] for title in titles]))  # Ensure unique titles
+    
+    return country_titles
+
+# GUI functions
+def on_insert():
+    insert_data()
+
+def on_read():
+    title = simpledialog.askstring("Read", "Enter Show Title:")
+    if title:
+        show_data = read_data('showName', {'title': title})
+        if show_data:
+            result_text.delete(1.0, tk.END)  # Clear previous results
+            for data in show_data:
+                for key, value in data.items():
+                    result_text.insert(tk.END, f"{key}: {value}\n")
+                result_text.insert(tk.END, "\n")
+        else:
+            messagebox.showinfo("Read", f"No show found with title: {title}")
+
+def on_update():
+    title = simpledialog.askstring("Update", "Enter Show Title to Update:")
+    if title:
+        field = simpledialog.askstring("Update", "Enter Field to Update:")
+        new_value = simpledialog.askstring("Update", "Enter New Value:")
+        if field and new_value:
+            update_data('showName', {'title': title}, {field: new_value})
+            messagebox.showinfo("Update", f"Show '{title}' updated successfully.")
+        else:
+            messagebox.showerror("Update Error", "Please provide both field and new value.")
+
+def on_delete():
+    title = simpledialog.askstring("Delete", "Enter Show Title to Delete:")
+    if title:
+        delete_data('showName', {'title': title})
+        messagebox.showinfo("Delete", f"Show '{title}' deleted successfully.")
+
+# GUI functions for CRUD operations on 'showType' collection
+def on_insert_showType():
+    show_id = simpledialog.askstring("Insert showType", "Enter Show ID:")
+    type_name = simpledialog.askstring("Insert showType", "Enter Show Type:")
+    if show_id and type_name:
+        collection = db['showType']
+        collection.insert_one({'show_id': show_id, 'type': type_name})
+        messagebox.showinfo("Insert showType", f"Show Type '{type_name}' for Show ID '{show_id}' inserted successfully.")
+
+def on_read_showType():
+    show_types = db['showType'].find()
+    result_text.delete(1.0, tk.END)  # Clear previous results
+    result_text.insert(tk.END, "Show Types:\n")
+    for show_type in show_types:
+        result_text.insert(tk.END, f"ID: {show_type['show_id']}, Type: {show_type['type']}\n")
+
+def on_update_showType():
+    show_id = simpledialog.askstring("Update showType", "Enter Show ID:")
+    if show_id:
+        new_type = simpledialog.askstring("Update showType", "Enter New Show Type:")
+        if new_type:
+            collection = db['showType']
+            collection.update_one({'show_id': show_id}, {'$set': {'type': new_type}})
+            messagebox.showinfo("Update showType", f"Show Type for Show ID '{show_id}' updated to '{new_type}' successfully.")
+
+def on_delete_showType():
+    show_id = simpledialog.askstring("Delete showType", "Enter Show ID to Delete:")
+    if show_id:
+        collection = db['showType']
+        collection.delete_one({'show_id': show_id})
+        messagebox.showinfo("Delete showType", f"Show Type for Show ID '{show_id}' deleted successfully.")
+
+# GUI functions for CRUD operations on 'showdate' collection
+def on_insert_showdate():
+    show_id = simpledialog.askstring("Insert showdate", "Enter Show ID:")
+    country = simpledialog.askstring("Insert showdate", "Enter Country:")
+    date_added = simpledialog.askstring("Insert showdate", "Enter Date Added (YYYY-MM-DD):")
+    if show_id and country and date_added:
+        collection = db['showdate']
+        collection.insert_one({'show_id': show_id, 'country': country, 'date_added': date_added})
+        messagebox.showinfo("Insert showdate", "Show date inserted successfully.")
+
+def on_read_showdate():
+    show_dates = db['showdate'].find()
+    result_text.delete(1.0, tk.END)  # Clear previous results
+    result_text.insert(tk.END, "Show Dates:\n")
+    for show_date in show_dates:
+        result_text.insert(tk.END, f"ID: {show_date['show_id']}, Country: {show_date['country']}, Date Added: {show_date['date_added']}\n")
+
+def on_update_showdate():
+    show_id = simpledialog.askstring("Update showdate", "Enter Show ID:")
+    if show_id:
+        new_country = simpledialog.askstring("Update showdate", "Enter New Country:")
+        new_date_added = simpledialog.askstring("Update showdate", "Enter New Date Added (YYYY-MM-DD):")
+        if new_country and new_date_added:
+            collection = db['showdate']
+            collection.update_one({'show_id': show_id}, {'$set': {'country': new_country, 'date_added': new_date_added}})
+            messagebox.showinfo("Update showdate", f"Show date for Show ID '{show_id}' updated successfully.")
+
+def on_delete_showdate():
+    show_id = simpledialog.askstring("Delete showdate", "Enter Show ID to Delete:")
+    if show_id:
+        collection = db['showdate']
+        collection.delete_one({'show_id': show_id})
+        messagebox.showinfo("Delete showdate", f"Show date for Show ID '{show_id}' deleted successfully.")
+
+# GUI functions for search operations
+def on_search_by_type():
+    show_type = simpledialog.askstring("Search by Type", "Enter Show Type:")
+    if show_type:
+        titles = get_titles_by_type(show_type)
+        if titles:
+            result_text.delete(1.0, tk.END)  # Clear previous results
+            result_text.insert(tk.END, f"Shows with type '{show_type}':\n")
+            for title in titles:
+                result_text.insert(tk.END, f"{title}\n")
+        else:
+            messagebox.showinfo("Search by Type", f"No shows found with type: {show_type}")
+
+def on_search_by_duration():
+    duration = simpledialog.askstring("Search by Duration", "Enter Show Duration:")
+    if duration:
+        titles = get_titles_by_duration(duration)
+        if titles:
+            result_text.delete(1.0, tk.END)  # Clear previous results
+            result_text.insert(tk.END, f"Shows with duration '{duration}':\n")
+            for title in titles:
+                result_text.insert(tk.END, f"{title}\n")
+        else:
+            messagebox.showinfo("Search by Duration", f"No shows found with duration: {duration}")
+
+def on_search_by_rating():
+    rating = simpledialog.askstring("Search by Rating", "Enter Show Rating:")
+    if rating:
+        titles = get_titles_by_rating(rating)
+        if titles:
+            result_text.delete(1.0, tk.END)  # Clear previous results
+            result_text.insert(tk.END, f"Shows with rating '{rating}':\n")
+            for title in titles:
+                result_text.insert(tk.END, f"{title}\n")
+        else:
+            messagebox.showinfo("Search by Rating", f"No shows found with rating: {rating}")
+
+def on_search_by_title():
+    title = simpledialog.askstring("Search by Title", "Enter Show Title:")
+    if title:
+        details = get_details_by_title(title)
+        result_text.delete(1.0, tk.END)  # Clear previous results
+        if details:
+            for key, value in details.items():
+                if key != '_id':
+                    result_text.insert(tk.END, f"{key}: {value}\n")
+        else:
+            messagebox.showinfo("Search by Title", f"No details found for title: {title}")
+
+def on_search_by_title_for_cast():
+    title = simpledialog.askstring("Search by Title for Cast", "Enter Show Title:")
+    if title:
+        cast = get_cast_by_title(title)
+        if cast:
+            result_text.delete(1.0, tk.END)  # Clear previous results
+            result_text.insert(tk.END, f"Cast of '{title}':\n")
+            result_text.insert(tk.END, f"{cast}\n")
+        else:
+            messagebox.showinfo("Search by Title for Cast", f"No show found with title: {title}")
+
+# Aggregate shows count by release year
+def aggregate_shows_count_by_release_year():
+    pipeline = [
+        {"$group": {"_id": "$release_year", "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}}
+    ]
+    collection = db['showName']
+    aggregation_result = collection.aggregate(pipeline)
+    result_text.delete(1.0, tk.END)  # Clear previous results
+    result_text.insert(tk.END, "Show Count by Release Year:\n")
+    for result in aggregation_result:
+        result_text.insert(tk.END, f"{result['_id']}: {result['count']}\n")
+
+def aggregate_shows_count_by_rating():
+    pipeline = [
+        {"$group": {"_id": "$rating", "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}}
+    ]
+    collection = db['showName']
+    aggregation_result = collection.aggregate(pipeline)
+    result_text.delete(1.0, tk.END)  # Clear previous results
+    result_text.insert(tk.END, "Show Count by Rating:\n")
+    for result in aggregation_result:
+        result_text.insert(tk.END, f"{result['_id']}: {result['count']}\n")
+
+def aggregate_shows_count_by_date_added():
+    pipeline = [
+        {"$group": {"_id": "$date_added", "count": {"$sum": 1}}},
+        {"$sort": {"_id": 1}}
+    ]
+    collection = db['showdate']
+    aggregation_result = collection.aggregate(pipeline)
+    result_text.delete(1.0, tk.END)  # Clear previous results
+    result_text.insert(tk.END, "Show Count by Date Added:\n")
+    for result in aggregation_result:
+        result_text.insert(tk.END, f"{result['_id']}: {result['count']}\n")
+
+# MapReduce functions
+def on_map_reduce():
+    results = map_reduce_example()
+    result_text.delete(1.0, tk.END)  # Clear previous results
+    result_text.insert(tk.END, "MapReduce results:\n")
+    for result in results:
+        result_text.insert(tk.END, f"Year {result['_id']}: {', '.join(result['value']['titles'])}\n")
+
+def on_map_reduce_movies_by_rating():
+    result = map_reduce_movies_by_rating()
+    result_text.delete(1.0, tk.END)  # Clear previous results
+    result_text.insert(tk.END, "MapReduce Results - Movies Count by Rating:\n")
+    for doc in result:
+        result_text.insert(tk.END, f"Rating: {doc['_id']}, Count: {doc['value']}\n")
+
+def on_map_reduce_by_country():
+    country_titles = map_reduce_by_country()
+    result_text.delete(1.0, tk.END)  # Clear previous results
+    result_text.insert(tk.END, "MapReduce Result by Country:\n")
+    for country, titles in country_titles.items():
+        result_text.insert(tk.END, f"Country: {country}\n")
+        for title in titles:
+            result_text.insert(tk.END, f" - {title}\n")
+
+# Initialize the main window
+root = tk.Tk()
+root.title("Disney Show CRUD Operations")
+
+# Set up the main frame
+main_frame = ttk.Frame(root, padding=10)
+main_frame.pack(padx=10, pady=10)
+
+# Function to create a styled button
+def create_button(parent, text, command, row, column, bootstyle):
+    button = ttk.Button(parent, text=text, command=command, style=bootstyle)
+    button.grid(row=row, column=column, padx=5, pady=5)
+
+# Function to create a frame with a border and pack it
+def create_border_frame(parent, row):
+    border_frame = ttk.Frame(parent, padding=5, relief="ridge", borderwidth=2)
+    border_frame.grid(row=row, column=0, pady=10, sticky="ew")
+    return border_frame
+
+# Create frames for each category of buttons
+crud_frame = create_border_frame(main_frame, 0)
+search_frame = create_border_frame(main_frame, 1)
+aggregation_frame = create_border_frame(main_frame, 2)
+indexing_frame = create_border_frame(main_frame, 3)
+map_reduce_frame = create_border_frame(main_frame, 4)
+additional_crud_frame = create_border_frame(main_frame, 5)
+
+# Create buttons for CRUD operations with different styles
+create_button(crud_frame, "Insert Data", on_insert, 0, 0, 'success')
+create_button(crud_frame, "Read Data", on_read, 0, 1, 'info')
+create_button(crud_frame, "Update Data", on_update, 0, 2, 'warning')
+create_button(crud_frame, "Delete Data", on_delete, 0, 3, 'danger')
+
+# Create buttons for search operations
+create_button(search_frame, "Search by Type", on_search_by_type, 0, 0, 'primary')
+create_button(search_frame, "Search by Duration", on_search_by_duration, 0, 1, 'primary')
+create_button(search_frame, "Search by Rating", on_search_by_rating, 0, 2, 'primary')
+create_button(search_frame, "Search by Title", on_search_by_title, 0, 3, 'primary')
+create_button(search_frame, "Search by Title for Cast", on_search_by_title_for_cast, 0, 4, 'primary')
+
+# Create buttons for aggregation
+create_button(aggregation_frame, "Aggregate by Release Year", aggregate_shows_count_by_release_year, 0, 0, 'secondary')
+create_button(aggregation_frame, "Aggregate by Rating", aggregate_shows_count_by_rating, 0, 1, 'secondary')
+create_button(aggregation_frame, "Aggregate by Date added", aggregate_shows_count_by_date_added, 0, 2, 'secondary')
+
+# Create buttons for sorting/indexing
+create_button(indexing_frame, "Indexing by Release Year", sort_by_release_year, 0, 0, 'info')
+create_button(indexing_frame, "Indexing by Rating", sort_by_rating, 0, 1, 'info')
+create_button(indexing_frame, "Indexing by Duration", sort_by_duration, 0, 2, 'info')
+
+# Create buttons for MapReduce
+create_button(map_reduce_frame, "MapReduce", on_map_reduce, 0, 0, 'dark')
+create_button(map_reduce_frame, "MapReduce Movies by Country", on_map_reduce_by_country, 0, 1, 'dark')
+
+# Create buttons for additional CRUD operations for 'showType' collection
+create_button(additional_crud_frame, "Insert showType Data", on_insert_showType, 0, 0, 'success')
+create_button(additional_crud_frame, "Read showType Data", on_read_showType, 0, 1, 'info')
+create_button(additional_crud_frame, "Update showType Data", on_update_showType, 0, 2, 'warning')
+create_button(additional_crud_frame, "Delete showType Data", on_delete_showType, 0, 3, 'danger')
+
+# Create buttons for additional CRUD operations for 'showdate' collection
+create_button(additional_crud_frame, "Insert showdate Data", on_insert_showdate, 0, 4, 'success')
+create_button(additional_crud_frame, "Read showdate Data", on_read_showdate, 0, 5, 'info')
+create_button(additional_crud_frame, "Update showdate Data", on_update_showdate, 0, 6, 'warning')
+create_button(additional_crud_frame, "Delete showdate Data", on_delete_showdate, 0, 7, 'danger')
+
+# Add a text box to display results
+result_text = tk.Text(main_frame, height=20, width=100)
+result_text.grid(row=6, column=0, padx=5, pady=5, columnspan=4)
+
+root.mainloop()
